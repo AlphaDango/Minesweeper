@@ -4,7 +4,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Buttons;
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Buttons, System.Generics.Collections;
 
 type
   TCoordinates = record
@@ -14,16 +14,24 @@ type
 
   TMineButton = class(TBitBtn)
     procedure userClick(Sender: TObject);
+    procedure mouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure mouseIndiDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
     private
       FisBomb: Boolean;
       FbombIndicator: UInt8;
       Fcoordinates: TCoordinates;
       Indicator: TLabel;
+      Neighbours: TList<TMineButton>;
       function isInBounds(Coordinate: Integer): Boolean;
     public
       constructor Create(AOwner: TComponent; X: UInt8; Y: UInt8; bombChance: Float32); overload;
-      procedure checkNeighbour(checkForBombs: Boolean = False);
+      procedure calcBombIndicator;
       procedure explode;
+      procedure Free; overload;
+      procedure addNeighbour(Neighbour: TMineButton);
+      procedure remNeighbour(Neighbour: TMineButton);
       function isBomb: Boolean;
   end;
 
@@ -61,9 +69,7 @@ procedure TGameForm.FormCreate(Sender: TObject);
 var
   Y: Integer;
   X: Integer;
-  NumOfBombs: Integer;
 begin
-  NumOfBombs := 20;
   SetLength(MineField,20,20);
   for Y := 0 to Length(MineField)-1 do begin
     for X := 0 to Length(MineField[Y])-1 do begin
@@ -73,7 +79,7 @@ begin
 
   for Y := 0 to Length(MineField)-1 do begin
     for X := 0 to Length(MineField[Y])-1 do begin
-      MineField[Y][X].checkNeighbour(True);
+      MineField[Y][X].calcBombIndicator;
     end;
   end;
 
@@ -107,62 +113,52 @@ begin
   Width := 50;
   Height := 50;
   Parent := AOwner as TWinControl;
-  Self.OnClick := userClick;
+  Self.OnMouseDown := mouseDown;
+
+  Neighbours := TList<TMineButton>.Create;
+  //Add Neighbour references
+
+  //Links
+  if X > 0 then begin
+    GameForm.MineField[Y][X-1].addNeighbour(Self);
+    addNeighbour(GameForm.MineField[Y][X-1]);
+  end;
+
+  //Oben Links
+  if (X > 0) and (Y > 0) then begin
+    GameForm.MineField[Y-1][X-1].addNeighbour(Self);
+    addNeighbour(GameForm.MineField[Y-1][X-1]);
+  end;
+
+  //Oben
+  if Y > 0 then begin
+    GameForm.MineField[Y-1][X].addNeighbour(Self);
+    addNeighbour(GameForm.MineField[Y-1][X]);
+  end;
+
+  //Oben Rechts
+  if (X < Length(GameForm.MineField[0])-1) and (Y > 0) then begin
+    GameForm.MineField[Y-1][X+1].addNeighbour(Self);
+    addNeighbour(GameForm.MineField[Y-1][X+1]);
+  end;
 end;
 
-procedure TMineButton.checkNeighbour(checkForBombs: Boolean = False);
+procedure TMineButton.addNeighbour(Neighbour: TMineButton);
 begin
-if FisBomb then FbombIndicator := 255 else begin
-
- //Check Topleft
- if isInBounds(Fcoordinates.Y-1) and isInBounds(Fcoordinates.X-1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y-1][Fcoordinates.X-1].isBomb then Inc(FbombIndicator);
-  end;
- end;
- //Check Top
- if isInBounds(Fcoordinates.Y-1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y-1][Fcoordinates.X].isBomb then Inc(FbombIndicator);
-  end else GameForm.MineField[Fcoordinates.Y-1][Fcoordinates.X].userClick(Self);
- end;
- //Check Topright
- if isInBounds(Fcoordinates.Y-1) and isInBounds(Fcoordinates.X+1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y-1][Fcoordinates.X+1].isBomb then Inc(FbombIndicator);
-  end;
- end;
- //Check Left
- if isInBounds(Fcoordinates.X-1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y][Fcoordinates.X-1].isBomb then Inc(FbombIndicator);
-  end else GameForm.MineField[Fcoordinates.Y][Fcoordinates.X-1].userClick(Self);
- end;
- //Check Right
- if isInBounds(Fcoordinates.X+1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y][Fcoordinates.X+1].isBomb then Inc(FbombIndicator);
-  end else GameForm.MineField[Fcoordinates.Y][Fcoordinates.X+1].userClick(Self);
- end;
- //Check Bottomleft
- if isInBounds(Fcoordinates.Y+1) and isInBounds(Fcoordinates.X-1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y+1][Fcoordinates.X-1].isBomb then Inc(FbombIndicator);
-  end;
- end;
- //Check Bottom
- if isInBounds(Fcoordinates.Y+1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y+1][Fcoordinates.X].isBomb then Inc(FbombIndicator);
-  end else GameForm.MineField[Fcoordinates.Y+1][Fcoordinates.X].userClick(Self);
- end;
- //Check Bottomright
- if isInBounds(Fcoordinates.Y+1) and isInBounds(Fcoordinates.X+1) then begin
-  if checkForBombs then begin
-    if GameForm.MineField[Fcoordinates.Y+1][Fcoordinates.X+1].isBomb then Inc(FbombIndicator);
-  end;
- end;
+  Neighbours.Add(Neighbour);
 end;
+
+procedure TMineButton.remNeighbour(Neighbour: TMineButton);
+begin
+  Neighbours.Remove(Neighbour);
+end;
+
+procedure TMineButton.calcBombIndicator;
+var
+  Neighbour: TMineButton;
+begin
+  for Neighbour in Neighbours do
+    if Neighbour.isBomb then Inc(FbombIndicator);
 end;
 
 function TMineButton.isInBounds(Coordinate: Integer): Boolean;
@@ -176,6 +172,9 @@ begin
 end;
 
 procedure TMineButton.userClick(Sender: TObject);
+var
+  Neighbour: TMineButton;
+
   function _getColor: TColor;
   begin
     case FbombIndicator of
@@ -192,13 +191,17 @@ procedure TMineButton.userClick(Sender: TObject);
 begin
  if FisBomb then begin
   GameForm.explodeAll;
-  Abort;
+  Exit;
  end;
 
- if Enabled then begin
+ if Enabled and (Indicator = nil) then begin
    if FbombIndicator < 1 then begin
     Enabled := False;
-    checkNeighbour;
+    for Neighbour in Neighbours do begin
+      Neighbour.remNeighbour(Self);
+      Neighbour.userClick(Self);
+    end;
+
    end else begin
     Enabled := False;
     Indicator := TLabel.Create(Self);
@@ -215,8 +218,11 @@ begin
 end;
 
 procedure TMineButton.explode;
+var
+  Neighbour: TMineButton;
 begin
   Enabled := False;
+  if Indicator <> nil then FreeAndNil(Indicator);
   Indicator := TLabel.Create(Self);
   with Indicator do begin
     Parent := Self;
@@ -226,6 +232,34 @@ begin
     Caption := '%';
     Font.Color := clWebOrange;
   end;
+  for Neighbour in Neighbours do Neighbour.remNeighbour(Self);
+end;
+
+procedure TMineButton.mouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  if Button = mbRight then begin
+    Indicator := TLabel.Create(Self);
+    with Indicator do begin
+      Parent := Self;
+      Align := alClient;
+      Alignment := taCenter;
+      Layout := tlCenter;
+      Caption := '#';
+      Font.Color := clBlack;
+      OnMouseDown := mouseIndiDown;
+    end;
+  end else if Button = mbLeft then begin
+    if Indicator = nil then userClick(Sender)
+    else Indicator.BringToFront;
+  end;
+end;
+
+procedure TMineButton.mouseIndiDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  if Button = mbRight then
+    FreeAndNil(Indicator);
 end;
 
 function TMineButton.isBomb: Boolean;
@@ -233,4 +267,10 @@ begin
   Result := FisBomb;
 end;
 
+procedure TMineButton.Free;
+begin
+  Neighbours.Clear;
+  Neighbours.Free;
+  inherited Free;
+end;
 end.
